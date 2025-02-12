@@ -36,15 +36,12 @@ public class MetroService {
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;
 
-    @Autowired
-    private UserService userService; // Assume this service exists for validation
-
-    @Autowired
-    private PaymentService paymentService; // Assume this service exists for payment processing
+     // Assume this service exists for payment processing
 
     public String checkIn(String userId, String stationId) {
         // Validate user's QR code or metro card
-        boolean isValid = userService.validateUser(userId);
+        boolean isValid = true; // Placeholder for validation logic
+
         if (!isValid) {
             throw new CustomException("Invalid QR code or metro card");
         }
@@ -59,6 +56,7 @@ public class MetroService {
         return "Checked in successfully";
     }
 
+
     public String checkOut(String userId, String stationId) {
         // Fetch check-in record
         CheckIn checkIn = checkInRepository.findByUserId(userId);
@@ -69,8 +67,9 @@ public class MetroService {
         // Calculate fare based on distance and time
         long fare = fareCalculator.calculateFare(checkIn, stationId);
 
-        // Send fare to Payment Service
-        paymentService.processPayment(userId, fare);
+        // TODO: Send fare to Payment Service later when PaymentService is implemented
+        // For now, just log the fare
+        System.out.println("Fare calculated: " + fare);
 
         // Update check-out time
         checkIn.setCheckOutTime(System.currentTimeMillis());
