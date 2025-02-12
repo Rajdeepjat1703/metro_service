@@ -15,4 +15,8 @@ public class CheckIn {
     private String stationId;
     private LocalDateTime checkInTime;
     private LocalDateTime checkOutTime;
+
+    public CheckIn(String userId, String stationId, long l) {
+
+    }
 }
