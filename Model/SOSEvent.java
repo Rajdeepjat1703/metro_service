@@ -8,10 +8,10 @@ import lombok.Setter;
 @Entity
 @Getter
 @Setter
-public class Station {
+public class SOSEvent {
     @Id
+    private String userId;
     private String stationId;
-    private String stationName;
-    private String location;
+    private long timestamp;
 
 }

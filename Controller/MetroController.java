@@ -3,7 +3,6 @@ package com.webknot.metro_service.Controller;
 
 import com.webknot.metro_service.Model.Station;
 import com.webknot.metro_service.Service.MetroService;
-import org.apache.catalina.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,8 +35,7 @@ public class MetroController {
     }
 
     @GetMapping("/active-users")
-    public List<User> getActiveUsers() {
+    public List<String> getActiveUsers() {
         return metroService.getActiveUsers();
     }
-
 }

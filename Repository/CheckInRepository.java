@@ -8,4 +8,5 @@ import org.springframework.stereotype.Repository;
 public interface CheckInRepository extends JpaRepository<CheckIn, String> {
     CheckIn findByUserId(String userId);
 
+
 }
