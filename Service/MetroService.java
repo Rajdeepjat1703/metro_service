@@ -107,7 +107,7 @@ public class MetroService {
         }
     }
 
-        public String triggerSOS(String userId, String stationId) {
+    public String triggerSOS(String userId, String stationId) {
         // Create SOS event
         String sosEvent = "SOS triggered by user: " + userId + " at station: " + stationId;
 

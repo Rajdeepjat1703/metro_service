@@ -12,6 +12,6 @@ public class SOSEvent {
     @Id
     private String userId;
     private String stationId;
-    private long timestamp;
+
 
 }

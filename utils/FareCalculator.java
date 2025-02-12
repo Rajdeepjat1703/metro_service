@@ -1,7 +1,9 @@
 package com.webknot.metro_service.utils;
 
 import com.webknot.metro_service.Model.CheckIn;
+import org.springframework.stereotype.Component;
 
+@Component
 public class FareCalculator {
     public long calculateFare(CheckIn checkIn, String destinationStationId) {
         // Calculate fare based on distance and time
