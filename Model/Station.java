@@ -1,17 +1,38 @@
 package com.webknot.metro_service.Model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import lombok.Getter;
-import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import java.io.Serializable;
+import java.util.List;
 
 @Entity
-@Getter
-@Setter
-public class Station {
+@Data
+@Table(name = "station")
+public class Station implements Serializable {
     @Id
-    private String stationId;
-    private String stationName;
-    private String location;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
+    @Column(nullable = false)
+    private String name;
+
+    @Column(unique = true)
+    private String code;
+
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "sourceStation", cascade = CascadeType.ALL)
+    private List<Journey> journeysFromStation;
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "destinationStation", cascade = CascadeType.ALL)
+    private List<Journey> journeysToStation;
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "station", cascade = CascadeType.ALL)
+    private List<StationManager> stationManagers;
 }

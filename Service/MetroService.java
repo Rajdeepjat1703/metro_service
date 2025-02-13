@@ -1,126 +1,107 @@
 package com.webknot.metro_service.Service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.webknot.metro_service.CustomException;
-import com.webknot.metro_service.Model.CheckIn;
+import com.webknot.metro_service.MetroException;
+import com.webknot.metro_service.Model.Journey;
 import com.webknot.metro_service.Model.Station;
-import com.webknot.metro_service.Repository.CheckInRepository;
+import com.webknot.metro_service.Model.StationManager;
+import com.webknot.metro_service.Model.TicketType;
+import com.webknot.metro_service.Repository.JourneyRepository;
+import com.webknot.metro_service.Repository.StationManagerRepository;
 import com.webknot.metro_service.Repository.StationRepository;
-import com.webknot.metro_service.utils.FareCalculator;
-import org.apache.catalina.User;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+
+@Slf4j
 @Service
 public class MetroService {
+    private final StationRepository stationRepository;
+    private final JourneyRepository journeyRepository;
+    private final StationManagerRepository managerRepository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    @Autowired
-    private StationRepository stationRepository;
-    @Autowired
-    private ObjectMapper objectMapper;
+    public MetroService(StationRepository stationRepository,
+                        JourneyRepository journeyRepository,
+                        StationManagerRepository managerRepository,
+                        KafkaTemplate<String, Object> kafkaTemplate) {
+        this.stationRepository = stationRepository;
+        this.journeyRepository = journeyRepository;
+        this.managerRepository = managerRepository;
+        this.kafkaTemplate = kafkaTemplate;
+    }
 
-    @Autowired
-    private CheckInRepository checkInRepository;
 
-    @Autowired
-    private FareCalculator fareCalculator;
+    public List<Station> getAllActiveStations() {
+        log.info("Fetching all active stations");
+        return stationRepository.findByIsActive(true);
+    }
 
-    @Autowired
-    private RedisTemplate<String, String> redisTemplate;
+    public Journey checkIn(String userId, Long sourceStationId, String ticketType) {
+        log.info("Processing check-in for user: {}", userId);
+        Station station = stationRepository.findById(sourceStationId)
+                .orElseThrow(() -> new MetroException("Station not found"));
 
-    @Autowired
-    private KafkaTemplate<String, String> kafkaTemplate;
+        Journey journey = new Journey();
+        journey.setUserId(userId);
+        journey.setSourceStation(station);
+        journey.setCheckInTime(LocalDateTime.now());
+        journey.setTicketType(TicketType.valueOf(ticketType.toUpperCase()));
 
-     // Assume this service exists for payment processing
+        journey.setIsActive(true);
 
-    public String checkIn(String userId, String stationId) {
-        // Validate user's QR code or metro card
-        boolean isValid = true; // Placeholder for validation logic
+        return journeyRepository.save(journey);
+    }
 
-        if (!isValid) {
-            throw new CustomException("Invalid QR code or metro card");
+    public Journey checkOut(String userId, Long destinationStationId) {
+        log.info("Processing check-out for user: {}", userId);
+        Journey activeJourney = journeyRepository.findByUserIdAndIsActive(userId, true)
+                .stream().findFirst()
+                .orElseThrow(() -> new MetroException("No active journey found"));
+
+        Station destination = stationRepository.findById(destinationStationId)
+                .orElseThrow(() -> new MetroException("Station not found"));
+
+        activeJourney.setDestinationStation(destination);
+        activeJourney.setCheckOutTime(LocalDateTime.now());
+        activeJourney.setIsActive(false);
+
+        // Calculate time spent
+        Duration duration = Duration.between(activeJourney.getCheckInTime(), activeJourney.getCheckOutTime());
+        if (duration.toMinutes() > 90) {
+            kafkaTemplate.send("penalty-topic", Map.of(
+                    "userId", userId,
+                    "journeyId", activeJourney.getId(),
+                    "duration", duration.toMinutes()
+            ));
         }
 
-        // Save check-in time
-        CheckIn checkIn = new CheckIn(userId, stationId, System.currentTimeMillis());
-        checkInRepository.save(checkIn);
+        return journeyRepository.save(activeJourney);
+    }
 
-        // Add user to active users in Redis
-        redisTemplate.opsForSet().add("activeUsers", userId);
+    public void triggerSOS(String userId) {
+        log.info("Processing SOS for user: {}", userId);
+        Journey activeJourney = journeyRepository.findByUserIdAndIsActive(userId, true)
+                .stream().findFirst()
+                .orElseThrow(() -> new MetroException("No active journey found"));
 
-        return "Checked in successfully";
+        List<StationManager> managers = managerRepository.findByStation(activeJourney.getSourceStation());
+
+        // Notify station managers through Kafka
+        kafkaTemplate.send("sos-alert-topic", Map.of(
+                "userId", userId,
+                "stationId", activeJourney.getSourceStation().getId(),
+                "stationManagers", managers.stream().map(StationManager::getEmail).toList()
+        ));
     }
 
 
-    public String checkOut(String userId, String stationId) {
-        // Fetch check-in record
-        CheckIn checkIn = checkInRepository.findByUserId(userId);
-        if (checkIn == null) {
-            throw new CustomException("No check-in record found for user");
-        }
-
-        // Calculate fare based on distance and time
-        long fare = fareCalculator.calculateFare(checkIn, stationId);
-
-        // TODO: Send fare to Payment Service later when PaymentService is implemented
-        // For now, just log the fare
-        System.out.println("Fare calculated: " + fare);
-
-        // Update check-out time
-        checkIn.setCheckOutTime(System.currentTimeMillis());
-        checkInRepository.save(checkIn);
-
-        // Remove user from active users in Redis
-        redisTemplate.opsForSet().remove("activeUsers", userId);
-
-        return "Checked out successfully. Fare: " + fare;
+    public List<Journey> getActiveUsers() {
+        log.info("Fetching all active users");
+        return journeyRepository.findByIsActive(true);
     }
-
-    public List<Station> getAllStations() {
-        try {
-            // Check Redis cache first
-            String cachedStations = redisTemplate.opsForValue().get("allStations");
-
-            if (cachedStations != null) {
-                // Deserialize JSON string to List<Station>
-                return objectMapper.readValue(cachedStations, new TypeReference<List<Station>>() {
-                });
-            } else {
-                // Fetch from database if not in cache
-                List<Station> stations = stationRepository.findAll();
-
-                // Serialize List<Station> to JSON string
-                String stationsJson = objectMapper.writeValueAsString(stations);
-
-                // Store JSON string in Redis
-                redisTemplate.opsForValue().set("allStations", stationsJson);
-
-                return stations;
-            }
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public String triggerSOS(String userId, String stationId) {
-        // Create SOS event
-        String sosEvent = "SOS triggered by user: " + userId + " at station: " + stationId;
-
-        // Publish SOS event to Kafka
-        kafkaTemplate.send("sos-topic", sosEvent);
-
-        return "SOS triggered. Help is on the way.";
-    }
-
-    public List<String> getActiveUsers() {
-        // Fetch active users from Redis
-        return List.copyOf(redisTemplate.opsForSet().members("activeUsers"));
-    }
-
-
 }
