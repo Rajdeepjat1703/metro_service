@@ -40,7 +40,10 @@ public class MetroService {
         log.info("Fetching all active stations");
         return stationRepository.findByIsActive(true);
     }
-
+    public Station getStationById(Long stationId) {
+        return stationRepository.findById(stationId)
+                .orElseThrow(() -> new RuntimeException("Station not found with ID: " + stationId));
+    }
     public Journey checkIn(String userId, Long sourceStationId, String ticketType) {
         log.info("Processing check-in for user: {}", userId);
         Station station = stationRepository.findById(sourceStationId)

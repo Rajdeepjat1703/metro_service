@@ -24,6 +24,11 @@ public class MetroController {
     public ResponseEntity<List<Station>> getAllStations() {
         return ResponseEntity.ok(metroService.getAllActiveStations());
     }
+    @GetMapping("/stations/{stationId}")
+    public ResponseEntity<Station> getStationById(@PathVariable Long stationId) {
+        return ResponseEntity.ok(metroService.getStationById(stationId));
+    }
+
 
     @PostMapping("/check-in")
 
